@@ -283,59 +283,63 @@ func (obj *JsonStringConverter) traverseJson(v reflect.Value, curObjType string,
 			// Here key represents the struct Attribute Name/ Field Name
 			objMap, _ := v.MapIndex(key).Interface().(map[string]any)
 			logrus.Debug(repeat("\t", tabs), key)
-			objType := objMap["type"].(string) // objType represents the type of i'th attribute
-			logrus.Debug(repeat("\t", tabs) + objType)
-			objVal := objMap["val"] // objVal represents the value of i'th attribute
-			if len(objType) > 5 && (objType[1:4] == "map" || objType[0:3] == "map") {
-				// If objType/ Attribute type is Map. Then it is handled here
-				mapStartIndex := 0
-				if objType[1:4] == "map" {
-					mapStartIndex = 1
-				}
-				// Assuming the Key in Map is always string, map[string] --> 11 Characters
-				mapValuesType := objType[mapStartIndex+11:]
-				curMap := objVal.(map[string]any)
-
-				backTrackValues := ""
-				for curKey, curVal := range curMap {
-					logrus.Debug(repeat("\t", tabs), curKey)
-					// Run DFS over the Values of the map that is contained by i'th attribute as its value
-					backtrackVal := obj.traverseJson(reflect.ValueOf(curVal), objType, tabs+1)
-					backTrackValues += fmt.Sprintf("%s\"%s\" : %s,\n", repeat("\t", tabs+1), curKey, obj.formatTypeVal(mapValuesType, backtrackVal, tabs))
-				}
-				backTrackValues = backTrackValues[:len(backTrackValues)-1] // Removing the Last Extra Comma
-				out = out + fmt.Sprintf("%s%s : %s,\n", repeat("\t", tabs), key, obj.formatTypeVal(objType, backTrackValues, tabs))
-				/*
-					out would look like
-					Attribute-1: map[string]some_datatype{
-						"key1": "backtrackVal1",
-						"key2": "backtrackVal2"
+			if objMap["type"] != nil {
+				objType := objMap["type"].(string) // objType represents the type of i'th attribute
+				logrus.Debug(repeat("\t", tabs) + objType)
+				objVal := objMap["val"] // objVal represents the value of i'th attribute
+				if len(objType) > 5 && (objType[1:4] == "map" || objType[0:3] == "map") {
+					// If objType/ Attribute type is Map. Then it is handled here
+					mapStartIndex := 0
+					if objType[1:4] == "map" {
+						mapStartIndex = 1
 					}
-				*/
-			} else {
-				// If objType/ Attribute type is Not Map, It could be String, Any other Struct, Int, Slice etc
-				// Run DFS over the objVal which is the value of i'th attribute
-				backtrackVal := obj.traverseJson(reflect.ValueOf(objVal), objType, tabs+1)
-				// Special Case: If type is resourceList
-				if curObjType == "v1.ResourceList" {
-					// Need Extra Double-Quotes At Key (cpu, ephemoral-storage)
-					out = out + fmt.Sprintf("%s\"%s\"  : %s, \n", repeat("\t", tabs), key, obj.formatTypeVal(objType, backtrackVal, tabs))
+					// Assuming the Key in Map is always string, map[string] --> 11 Characters
+					mapValuesType := objType[mapStartIndex+11:]
+					curMap := objVal.(map[string]any)
+
+					backTrackValues := ""
+					for curKey, curVal := range curMap {
+						logrus.Debug(repeat("\t", tabs), curKey)
+						// Run DFS over the Values of the map that is contained by i'th attribute as its value
+						backtrackVal := obj.traverseJson(reflect.ValueOf(curVal), objType, tabs+1)
+						backTrackValues += fmt.Sprintf("%s\"%s\" : %s,\n", repeat("\t", tabs+1), curKey, obj.formatTypeVal(mapValuesType, backtrackVal, tabs))
+					}
+					backTrackValues = backTrackValues[:len(backTrackValues)-1] // Removing the Last Extra Comma
+					out = out + fmt.Sprintf("%s%s : %s,\n", repeat("\t", tabs), key, obj.formatTypeVal(objType, backTrackValues, tabs))
+					/*
+						out would look like
+						Attribute-1: map[string]some_datatype{
+							"key1": "backtrackVal1",
+							"key2": "backtrackVal2"
+						}
+					*/
 				} else {
-					out = out + fmt.Sprintf("%s%s  : %s, \n", repeat("\t", tabs), key, obj.formatTypeVal(objType, backtrackVal, tabs))
-				}
-				/*
-					out would look something Like:
-					Replicas: 32,
-					Containers: []corev1.Container{
-						corev1.Container{
-							Image: "hello-world" // These Values are a Result of Backtracking
-						},
-
+					// If objType/ Attribute type is Not Map, It could be String, Any other Struct, Int, Slice etc
+					// Run DFS over the objVal which is the value of i'th attribute
+					backtrackVal := obj.traverseJson(reflect.ValueOf(objVal), objType, tabs+1)
+					// Special Case: If type is resourceList
+					if curObjType == "v1.ResourceList" {
+						// Need Extra Double-Quotes At Key (cpu, ephemoral-storage)
+						out = out + fmt.Sprintf("%s\"%s\"  : %s, \n", repeat("\t", tabs), key, obj.formatTypeVal(objType, backtrackVal, tabs))
+					} else {
+						out = out + fmt.Sprintf("%s%s  : %s, \n", repeat("\t", tabs), key, obj.formatTypeVal(objType, backtrackVal, tabs))
 					}
-				*/
+					/*
+						out would look something Like:
+						Replicas: 32,
+						Containers: []corev1.Container{
+							corev1.Container{
+								Image: "hello-world" // These Values are a Result of Backtracking
+							},
+
+						}
+					*/
+				}
 			}
 		}
-		out = out[:len(out)-1] // Removing the last new line
+		if len(out) > 0 {
+			out = out[:len(out)-1] // Removing the last new line
+		}
 		return out
 
 	case reflect.String:
